@@ -14,7 +14,7 @@
 # ============================================================
 param(
     [string]$Owner,
-    [string]$Repo = 'tool-filter',
+    [string]$Repo = 'filter-tracks',
     [ValidateSet('public', 'private')]
     [string]$Visibility = 'public',
     [string]$Token,
@@ -22,6 +22,7 @@ param(
     [string]$Description = 'Lọc dung lượng ổ C: - ứng dụng desktop chỉ đọc, portable cho Windows',
     [string[]]$Topics = @('windows', 'powershell', 'wpf', 'disk-cleanup', 'portable', 'vietnamese'),
     [switch]$SkipRelease,
+    [switch]$UseStoredCredential,
     [switch]$DryRun
 )
 
@@ -31,6 +32,52 @@ Push-Location $root
 try {
     function Say($m, $c = 'Gray') { Write-Host $m -ForegroundColor $c }
     function Fail($m) { Write-Host "LỖI: $m" -ForegroundColor Red; exit 1 }
+
+    # ---------- Đọc token đã lưu (GitHub Desktop / Git Credential Manager) ----------
+    function Get-StoredGitHubToken {
+        if (-not ('CredMgr' -as [type])) {
+            Add-Type -TypeDefinition @'
+using System;
+using System.Runtime.InteropServices;
+public class CredMgr {
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+    public struct CREDENTIAL {
+        public int Flags;
+        public int Type;
+        public string TargetName;
+        public string Comment;
+        public System.Runtime.InteropServices.ComTypes.FILETIME LastWritten;
+        public int CredentialBlobSize;
+        public IntPtr CredentialBlob;
+        public int Persist;
+        public int AttributeCount;
+        public IntPtr Attributes;
+        public string TargetAlias;
+        public string UserName;
+    }
+    [DllImport("advapi32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    public static extern bool CredRead(string target, int type, int flags, out IntPtr credential);
+    [DllImport("advapi32.dll", SetLastError = true)]
+    public static extern void CredFree(IntPtr cred);
+}
+'@
+        }
+        $targets = @(cmdkey /list | Select-String -Pattern 'target=(.+)$' |
+            ForEach-Object { $_.Matches[0].Groups[1].Value.Trim() } |
+            Where-Object { $_ -match '^GitHub - https://api\.github\.com' -or $_ -match '^git:https://github\.com' })
+        foreach ($t in $targets) {
+            $ptr = [IntPtr]::Zero
+            if ([CredMgr]::CredRead($t, 1, 0, [ref]$ptr)) {
+                $c = [System.Runtime.InteropServices.Marshal]::PtrToStructure($ptr, [type][CredMgr+CREDENTIAL])
+                $bytes = New-Object byte[] $c.CredentialBlobSize
+                [System.Runtime.InteropServices.Marshal]::Copy($c.CredentialBlob, $bytes, 0, $c.CredentialBlobSize)
+                $val = [System.Text.Encoding]::UTF8.GetString($bytes).Trim([char]0, ' ', "`r", "`n")
+                [CredMgr]::CredFree($ptr) | Out-Null
+                if ($val -match '^gh[pousr]_' -and $val.Length -ge 20) { return $val }
+            }
+        }
+        return $null
+    }
 
     # ---------- Kiểm tra repo git ----------
     if (-not (Test-Path (Join-Path $root '.git'))) { Fail "Chưa có .git — chạy 'git init' trước." }
@@ -43,6 +90,12 @@ try {
     # ---------- Token ----------
     if (-not $Token) { $Token = $env:GITHUB_TOKEN }
     if (-not $Token) { $Token = $env:GH_TOKEN }
+    if (-not $Token -and $UseStoredCredential) {
+        Say '   Đang đọc token đã lưu trên máy (GitHub Desktop)...' 'DarkGray'
+        $Token = Get-StoredGitHubToken
+        if ($Token) { Say '   Tìm thấy token đã lưu.' 'Green' }
+        else { Say '   Không tìm thấy token đã lưu.' 'Yellow' }
+    }
     if (-not $Token -and $DryRun) {
         $label = $(if ($Owner) { "$Owner/$Repo" } else { "<owner>/$Repo" })
         Say "== [dry-run] $label (nhánh $branch, $Visibility) ==" 'Cyan'
@@ -63,6 +116,7 @@ try {
         exit 1
     }
 
+    [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
     $headers = @{
         Authorization          = "token $Token"
         Accept                 = 'application/vnd.github+json'
@@ -89,17 +143,17 @@ try {
     if (-not $exists) {
         Say "   Tạo repo mới $slug ($Visibility)..."
         $body = @{ name = $Repo; description = $Description; private = ($Visibility -eq 'private'); has_issues = $true; has_wiki = $false } | ConvertTo-Json
-        $null = Invoke-RestMethod -Uri "$api/user/repos" -Headers $headers -Method Post -Body $body -ContentType 'application/json'
+        $null = Invoke-RestMethod -Uri "$api/user/repos" -Headers $headers -Method Post -Body ([System.Text.Encoding]::UTF8.GetBytes($body)) -ContentType 'application/json; charset=utf-8'
         Say '   Đã tạo repo.' 'Green'
     } else {
         Say '   Repo đã tồn tại, cập nhật mô tả + topics...'
         $body = @{ description = $Description; homepage = '' } | ConvertTo-Json
-        $null = Invoke-RestMethod -Uri "$api/repos/$slug" -Headers $headers -Method Patch -Body $body -ContentType 'application/json'
+        $null = Invoke-RestMethod -Uri "$api/repos/$slug" -Headers $headers -Method Patch -Body ([System.Text.Encoding]::UTF8.GetBytes($body)) -ContentType 'application/json; charset=utf-8'
     }
 
     if ($Topics.Count -gt 0) {
         $tb = @{ names = $Topics } | ConvertTo-Json
-        try { $null = Invoke-RestMethod -Uri "$api/repos/$slug/topics" -Headers $headers -Method Put -Body $tb -ContentType 'application/json' } catch { }
+        try { $null = Invoke-RestMethod -Uri "$api/repos/$slug/topics" -Headers $headers -Method Put -Body ([System.Text.Encoding]::UTF8.GetBytes($tb)) -ContentType 'application/json; charset=utf-8' } catch { }
     }
 
     # ---------- Remote + push ----------
@@ -110,9 +164,13 @@ try {
     Say "   Đẩy mã nguồn lên $cleanUrl ..."
 
     $authUrl = "https://x-access-token:$Token@github.com/$slug.git"
-    $log = (& git -c credential.helper= push $authUrl "refs/heads/$branch:refs/heads/$branch" 2>&1 | Out-String)
+    $prevEap = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    $log = (& git -c credential.helper= push $authUrl "refs/heads/${branch}:refs/heads/${branch}" 2>&1 | Out-String)
+    $pushCode = $LASTEXITCODE
+    $ErrorActionPreference = $prevEap
     $log = $log -replace [regex]::Escape($Token), '***'
-    if ($LASTEXITCODE -ne 0) { Write-Host $log; Fail "git push thất bại (mã $LASTEXITCODE)." }
+    if ($pushCode -ne 0) { Write-Host $log; Fail "git push thất bại (mã $pushCode)." }
     Say '   Đã đẩy mã nguồn.' 'Green'
 
     # ---------- Release ----------
@@ -147,10 +205,10 @@ try {
         try { $rel = Invoke-RestMethod -Uri "$api/repos/$slug/releases/tags/$tag" -Headers $headers -Method Get } catch { }
         if ($rel) {
             Say "   Release $tag đã có, cập nhật..."
-            $rel = Invoke-RestMethod -Uri "$api/repos/$slug/releases/$($rel.id)" -Headers $headers -Method Patch -Body $relBody -ContentType 'application/json'
+            $rel = Invoke-RestMethod -Uri "$api/repos/$slug/releases/$($rel.id)" -Headers $headers -Method Patch -Body ([System.Text.Encoding]::UTF8.GetBytes($relBody)) -ContentType 'application/json; charset=utf-8'
         } else {
             Say "   Tạo release $tag ..."
-            $rel = Invoke-RestMethod -Uri "$api/repos/$slug/releases" -Headers $headers -Method Post -Body $relBody -ContentType 'application/json'
+            $rel = Invoke-RestMethod -Uri "$api/repos/$slug/releases" -Headers $headers -Method Post -Body ([System.Text.Encoding]::UTF8.GetBytes($relBody)) -ContentType 'application/json; charset=utf-8'
         }
 
         $assetName = Split-Path $zip -Leaf

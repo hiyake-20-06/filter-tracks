@@ -1,4 +1,4 @@
-<p align="center">
+﻿<p align="center">
   <img src="docs/logo.png" width="104" alt="Tool Filter">
 </p>
 
@@ -10,10 +10,15 @@
 </p>
 
 <p align="center">
+  <a href="https://github.com/hiyake-20-06/filter-tracks/releases/latest"><img alt="Release" src="https://img.shields.io/github/v/release/hiyake-20-06/filter-tracks?color=2563EB"></a>
   <img alt="Windows" src="https://img.shields.io/badge/platform-Windows%2010%20%7C%2011-2563EB?logo=windows&logoColor=white">
   <img alt="PowerShell" src="https://img.shields.io/badge/PowerShell-5.1-5391FE?logo=powershell&logoColor=white">
   <img alt="License" src="https://img.shields.io/badge/license-MIT-16A34A">
   <img alt="Portable" src="https://img.shields.io/badge/portable-no%20install-0F172A">
+</p>
+
+<p align="center">
+  <a href="https://github.com/hiyake-20-06/filter-tracks/releases/latest"><b>⬇️ Tải bản portable mới nhất</b></a>
 </p>
 
 ![Giao diện Tool Filter](docs/screenshot.png)
@@ -57,7 +62,7 @@ Khi ổ C: đầy, các công cụ “dọn dẹp một nút” thường xóa q
 
 ### Cách 1 — Bản portable (khuyến nghị)
 
-1. Vào mục **[Releases](../../releases)** và tải `ToolFilter-Portable-v1.0.0.zip`.
+1. Vào mục **[Releases](https://github.com/hiyake-20-06/filter-tracks/releases)** và tải `ToolFilter-Portable-v1.0.0.zip`.
 2. Giải nén **toàn bộ** thư mục (đừng chỉ lấy file `.exe`).
 3. Nhấp đôi **`ToolFilter.exe`**.
 4. Lần đầu, bấm **“Quét lại ổ C:”** (khoảng 2–4 phút). Khi cửa sổ quét đóng, bấm **“Tải lại dữ liệu”**.
@@ -69,8 +74,8 @@ Khi ổ C: đầy, các công cụ “dọn dẹp một nút” thường xóa q
 ### Cách 2 — Từ mã nguồn
 
 ```powershell
-git clone https://github.com/<your-user>/tool-filter.git
-cd tool-filter
+git clone https://github.com/hiyake-20-06/filter-tracks.git
+cd filter-tracks
 powershell -ExecutionPolicy Bypass -File .\build\Build-Portable.ps1
 .\app\ToolFilter.exe
 ```
@@ -186,16 +191,16 @@ powershell -ExecutionPolicy Bypass -File .\build\Build-Portable.ps1 -Version 1.0
 ```powershell
 $env:GITHUB_TOKEN = 'ghp_...'   # Personal Access Token, quyền "repo"
 powershell -ExecutionPolicy Bypass -File .\build\Publish-GitHub.ps1 `
-    -Owner <tài-khoản-GitHub> -Repo tool-filter
+    -Owner hiyake-20-06 -Repo filter-tracks
 ```
 
 Script tự động: tạo repo (nếu chưa có) → đẩy mã nguồn → build ZIP → tạo Release `v1.0.0` và đính kèm file ZIP.
-Muốn chỉ xem trước: thêm `-DryRun`.
+Muốn chỉ xem trước: thêm `-DryRun`. Nếu máy đã đăng nhập GitHub Desktop: thêm `-UseStoredCredential`.
 
 ### Làm thủ công
 
 ```powershell
-git remote add origin https://github.com/<tài-khoản>/tool-filter.git
+git remote add origin https://github.com/hiyake-20-06/filter-tracks.git
 git push -u origin main
 git tag v1.0.0
 git push origin v1.0.0
