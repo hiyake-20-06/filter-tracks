@@ -1,0 +1,17 @@
+# Build output
+app/
+dist/
+
+# Scan data (may contain personal paths)
+data/
+*.log
+
+# Archives
+*.zip
+
+# OS / editor
+Thumbs.db
+desktop.ini
+.DS_Store
+.vscode/
+.idea/
