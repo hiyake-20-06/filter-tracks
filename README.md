@@ -159,6 +159,7 @@ Quy tắc nằm trong [`Scan.ps1`](Scan.ps1); bạn có thể đọc và chỉnh
 ├─ Start-Tool.cmd           # Chạy nhanh từ mã nguồn
 ├─ build/
 │  ├─ Build-Portable.ps1    # Đóng gói app\ + dist\*.zip
+│  ├─ Publish-GitHub.ps1    # Đẩy repo + tạo Release kèm ZIP
 │  ├─ Launcher.cs           # EXE launcher (không console)
 │  ├─ New-Icon.ps1          # Sinh icon/logo
 │  ├─ New-Screenshot.ps1    # Sinh ảnh README (dữ liệu mẫu)
@@ -180,9 +181,22 @@ Quy tắc nằm trong [`Scan.ps1`](Scan.ps1); bạn có thể đọc và chỉnh
 powershell -ExecutionPolicy Bypass -File .\build\Build-Portable.ps1 -Version 1.0.0
 ```
 
-Phát hành lên GitHub:
+### Đăng lên GitHub bằng một lệnh
 
 ```powershell
+$env:GITHUB_TOKEN = 'ghp_...'   # Personal Access Token, quyền "repo"
+powershell -ExecutionPolicy Bypass -File .\build\Publish-GitHub.ps1 `
+    -Owner <tài-khoản-GitHub> -Repo tool-filter
+```
+
+Script tự động: tạo repo (nếu chưa có) → đẩy mã nguồn → build ZIP → tạo Release `v1.0.0` và đính kèm file ZIP.
+Muốn chỉ xem trước: thêm `-DryRun`.
+
+### Làm thủ công
+
+```powershell
+git remote add origin https://github.com/<tài-khoản>/tool-filter.git
+git push -u origin main
 git tag v1.0.0
 git push origin v1.0.0
 ```
